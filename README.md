@@ -17,7 +17,7 @@ To use, just call `6502Linter.exe <PATH_TO_MAIN_FILE> <TEMP_FORMAT>`.
 
 For my projects, this is a command ran in my `build.bat` script. See [NESPad](https://github.com/Akadeax/nespad/blob/main/build.bat)'s build script as an example.
 
-[Image of console output using the linker](https://github.com/Akadeax/6502-linter/blob/main/RepoIMG/LintOutput.jpg)
+![Image of console output using the linker](./RepoIMG/LintOutput.jpg)
 
 ## The Problem
 In 6502 assembly, it is common to use temporary variables stored in **zero-page memory** (the first 256 bytes of RAM). This is due to the 6502 having only 3 actually usable registers.
