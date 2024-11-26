@@ -136,7 +136,7 @@ int main(int argc, char* argv[])
 		{
 			anyLintErrors = true;
 			std::cout << std::format(
-		"[LINT]: function {} uses temps up to {}{}. Either change suffix to {} or use ';LINTIGNORE'.\n",
+		"[LINT]: function {} uses temps up to {}{}. Either change suffix to {} or use ';LINTEXCLUDE'.\n",
 				entry.first, tempFormatWithoutX, highestTemp, suggestedSuffix
 			);
 		}
