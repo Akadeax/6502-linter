@@ -65,14 +65,14 @@ This function modifies `zp_temp_0` and `zp_temp_1`. When calling `my_function_T1
 <br>
 If your hypothetical function `my_multiplier_T7` is called, assume that calling it invalidates `zp_temp_0` - `zp_temp_7`.
 
-If you wish for a function to ignore the linter's naming convention, end the line you define it on with `;LINTIGNORE` (handy for your interrupts, for example).
-
 Using this format turns debugging of this kind from `"Let's read all functions we call here, and everything that is called by that?"` into `"Oh, this call invalidates my temporaries!"`.
 
 
 
 ## What if I mess up the format?
 That's where this project comes in. It serves as a linter for confirming that your functions are correctly suffixed after how many temps are used. See [Setup](https://github.com/Akadeax/6502-linter?tab=readme-ov-file#setup).
+
+If you wish for a function to ignore the linter's naming convention, end the line you define it on with `;LINTEXCLUDE` (handy for your interrupts, for example).
 
 # License
 This is public domain, [Unlicense](https://unlicense.org/) specifically. Do whatever you want with it.
