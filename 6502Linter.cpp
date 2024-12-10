@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 #include <filesystem>
+#include <functional>
 #include <map>
 #include <ranges>
 #include <regex>
@@ -42,7 +43,7 @@ int main(int argc, char* argv[])
 	}
 
 	string mainSourceFolderPath{ std::filesystem::path(argv[1]).parent_path().string() };
-
+	
 	// Resolve TempFormat
 	std::string tempFormat{ argv[2] };
 	if (!tempFormat.ends_with("x"))
@@ -59,13 +60,16 @@ int main(int argc, char* argv[])
 		if (!mainAsLines[i].starts_with(".include")) continue;
 
 		vector<string> split{ Split(mainAsLines[i], ' ') };
-		mainAsLines.erase(std::begin(mainAsLines) + i);
+		mainAsLines.erase(std::begin(mainAsLines) + static_cast<long long>(i));
 
 		string includeFilePath{ split[1] };
 		// Remove quotations around filename
 		includeFilePath = includeFilePath.substr(1, includeFilePath.size() - 2);
-		// If exe was called from different folder than main is in, resolve folder path
-		includeFilePath = std::format("{}/{}", mainSourceFolderPath, includeFilePath);
+		// If exe was called from different folder than maiFn is in, resolve folder path
+		if (mainSourceFolderPath != "")
+		{
+			includeFilePath = std::format("{}/{}", mainSourceFolderPath, includeFilePath);
+		}
 
 		//cout << "resolving include " << includeFilePath << "...\n";
 
@@ -78,7 +82,7 @@ int main(int argc, char* argv[])
 		}
 
 		mainAsLines.insert(
-			std::begin(mainAsLines) + i,
+			std::begin(mainAsLines) + static_cast<long long>(i),
 			std::begin(includeAsLines),
 			std::end(includeAsLines)
 		);
@@ -95,7 +99,7 @@ int main(int argc, char* argv[])
 
 		if (line.starts_with(".proc") || line.starts_with(".macro"))
 		{
-			if (line.ends_with(";LINTEXCLUDE")) continue;
+			if (line.find("LINTEXCLUDE") != string::npos) continue;
 
 			vector lines{ Split(line, ' ') };
 			string functionName{ lines[1] };
@@ -121,7 +125,9 @@ int main(int argc, char* argv[])
 
 	for (std::pair<string, FunctionData> entry : functionMap)
 	{
-		bool success{ GatherHighestTempUsedForFunction(entry.second, tempFormatWithoutX) };
+		FunctionData& dataRef{ functionMap[entry.first] };
+		
+		bool success{ GatherHighestTempUsedForFunction(dataRef, tempFormatWithoutX) };
 
 		if (!success)
 		{
@@ -129,7 +135,7 @@ int main(int argc, char* argv[])
 			return 1;
 		}
 
-		int highestTemp{ entry.second.highestTempUsed };
+		int highestTemp{ dataRef.highestTempUsed };
 		std::string suggestedSuffix{ std::format("_T{}", highestTemp) };
 
 		if (highestTemp >= 0 && !entry.first.ends_with(suggestedSuffix))
@@ -144,10 +150,74 @@ int main(int argc, char* argv[])
 		{
 			anyLintErrors = true;
 			std::cout << std::format(
-				"[LINT]: function {} has a suffix implying temporaries while not using any.",
+				"[LINT]: function {} has a suffix implying temporaries while not using any.\n",
 				entry.first
 			);
 		}
+	}
+
+	// Step 4: Find out if any function calls occur that use more temps than a function is marked for
+	// e.g. if a function _T2 calls a function that is _T4, the first function should be a _T4 instead
+	for (std::pair<string, FunctionData> entry : functionMap)
+	{
+		if (entry.second.highestTempUsed == -1) continue;
+		
+		std::vector<FunctionData> calls{};
+		
+		for (const std::string& instruction : entry.second.instructions)
+		{
+			std::optional<std::pair<string, FunctionData>> functionCall{ std::nullopt };
+			for (std::pair<string, FunctionData> innerFunc : functionMap)
+			{
+				if (instruction.find(innerFunc.first) != string::npos)
+				{
+					functionCall = innerFunc;
+					break;
+				}
+			}
+
+			if (!functionCall.has_value()) continue;
+
+			if (functionCall->second.highestTempUsed != -1)
+			{
+				calls.emplace_back(functionCall->second);
+			}
+		}
+
+		if (calls.empty()) continue;
+		
+		int ownHighest{ entry.second.highestTempUsed };
+		auto lambda{ [ownHighest](const FunctionData& data)
+		{
+			return data.highestTempUsed <= ownHighest;
+		} };
+		std::erase_if(calls, lambda);
+
+		if (calls.empty()) continue;
+		
+		std::stringstream listStream{};
+		for(size_t i{}; i < calls.size(); ++i)
+		{
+			listStream << calls[i].name;
+			
+			if (i != calls.size() - 1)
+			{
+				listStream << ", ";
+			}
+		}
+
+		int max{ -1 };
+		for (const FunctionData& data : calls)
+		{
+			if (data.highestTempUsed >= max) max = data.highestTempUsed; 
+		}
+		
+		std::cout << std::format(
+			"[LINT] function {} calls {}. Either change suffix to _T{} or use ';LINTEXCLUDE'.\n",
+			entry.first, listStream.str(), max
+		);
+
+		anyLintErrors = true;
 	}
 
 	if (anyLintErrors) return 1;
@@ -212,36 +282,39 @@ bool GatherInstructionsForFunction(const vector<string>& fullFile, FunctionData&
 
 bool GatherHighestTempUsedForFunction(FunctionData& data, const std::string& tempFormatWithoutX)
 {
+	// Check all instructions for use of temp format
 	for (const std::string& instruction : data.instructions)
 	{
-		size_t foundPos{ instruction.find(tempFormatWithoutX) };
-		if (foundPos == string::npos) continue;
+		std::vector positions{ FindAllSubstrInString(instruction, tempFormatWithoutX) };
 
-		size_t tempIndexStart{ foundPos + tempFormatWithoutX.size() };
-
-		int val{ -1 };
-
-		int firstChar{ instruction[tempIndexStart] - '0' }; // converts ASCII to digit
-		if (firstChar < 0 || firstChar > 9) return false;
-
-		// should we use format_xx or format_x (1 or 2 digit temp number)?
-		int secondChar{ instruction[tempIndexStart + 1] - '0' }; // converts ASCII to digit
-		// is secondChar an invalid digit?
-		if (secondChar < 0 || secondChar > 9)
+		for (size_t pos : positions)
 		{
-			val = firstChar;
-		}
-		else
-		{
-			val = firstChar * 10 + secondChar;
-		}
+			size_t tempIndexStart{ pos + tempFormatWithoutX.size() };
 
-		if (val > data.highestTempUsed)
-		{
-			data.highestTempUsed = val;
+			int val;
+
+			int firstChar{ instruction[tempIndexStart] - '0' }; // converts ASCII to digit
+			if (firstChar < 0 || firstChar > 9) return false;
+
+			// should we use format_xx or format_x (1 or 2 digit temp number)?
+			int secondChar{ instruction[tempIndexStart + 1] - '0' }; // converts ASCII to digit
+			// is secondChar an invalid digit?
+			if (secondChar < 0 || secondChar > 9)
+			{
+				val = firstChar;
+			}
+			else
+			{
+				val = firstChar * 10 + secondChar;
+			}
+
+			if (val > data.highestTempUsed)
+			{
+				data.highestTempUsed = val;
+			}
 		}
 	}
-
+	
 	//cout << data.name << "'s highest temp used is " << data.highestTempUsed << '\n';
 	return true;
 }

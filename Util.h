@@ -10,3 +10,4 @@ std::vector<std::string> Split(const std::string& string, char delim);
 
 std::vector<std::string> GetFileAsLineVector(const std::string& filePath);
 
+std::vector<size_t> FindAllSubstrInString(const std::string& str, const std::string& substr);

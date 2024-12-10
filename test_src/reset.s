@@ -1,10 +1,10 @@
-.proc reset
+.proc reset ;LINTEXCLUDE
 	lda PPU_STATUS
 	lda #0
 	sta PPU_SCROLL
 	sta PPU_SCROLL
 
-	sei			; mask interrupts8257
+	sei			; mask interrupts
 	lda #0
 	sta PPU_CONTROL	; disable NMI
 	sta PPU_MASK	; disable rendering
@@ -22,7 +22,7 @@ wait_vblank:
 	bit PPU_STATUS
 	bpl wait_vblank
 
-		lda PPU_STATUS
+	lda PPU_STATUS
 	lda #0
 	sta PPU_SCROLL
 	sta PPU_SCROLL
@@ -45,15 +45,8 @@ clear_ram:
 	inx
 	bne clear_ram
 
-
-	; clear first page of WRAM
-	lda #0
-	ldx #0
-clear_wram_p1:
-	sta $6000,x
-	inx
-	bne clear_wram_p1
-
+	; handy for debugging if a clean page is needed
+	; jsr clear_wram_p1
 
 	; place all sprites offscreen at Y=255
 	lda #255
@@ -75,5 +68,6 @@ wait_vblank2:
 	; - enable the NMI for graphical updates and jump to our main program
 	lda #%10000000
 	sta PPU_CONTROL
+	
 	jmp main
 .endproc

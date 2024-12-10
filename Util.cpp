@@ -85,3 +85,19 @@ std::vector<std::string> GetFileAsLineVector(const std::string& filePath)
     std::vector<std::string> split{ SplitIntoLines(buffer.str()) };
     return split;
 }
+
+std::vector<size_t> FindAllSubstrInString(const std::string& str, const std::string& substr)
+{
+    std::vector<size_t> collection{};
+
+    for (size_t i{}; i < str.length(); ++i)
+    {
+        if (str.substr(i, substr.length()) == substr)
+        {
+            collection.emplace_back(i);
+            i += substr.length();
+        }
+    }
+
+    return collection;
+}
